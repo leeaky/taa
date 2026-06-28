@@ -1,10 +1,21 @@
+# Python
 .venv/
-config/
-.env
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+
+# Testing / type checking
 .pytest_cache/
 .mypy_cache/
+
+# Environment
+.env
+
+# OS
 .DS_Store
+
+# TAA model — runtime files, not for version control
+config_overrides.json
+src/data/cache/
+src/logs/

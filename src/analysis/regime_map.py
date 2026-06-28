@@ -136,12 +136,13 @@ def compute_asset_stats(
 ) -> pd.DataFrame:
     """
     For each regime period and each asset, compute return statistics.
-
-    Returns long-format DataFrame with columns:
-        regime, asset, period_idx,
-        total_return, annualised_return, max_drawdown, n_months
+    Vectorised — builds return slices per period using boolean indexing.
     """
+    if regime_periods.empty or monthly_returns.empty:
+        return pd.DataFrame()
+
     rows = []
+    ret_index = monthly_returns.index
 
     for _, period in regime_periods.iterrows():
         regime   = period["regime"]
@@ -149,15 +150,30 @@ def compute_asset_stats(
         end      = period["end"]
         n_months = period["duration_months"]
 
+        # Slice once per period, reuse for all assets
+        mask   = (ret_index >= start) & (ret_index <= end)
+        slice_ = monthly_returns.loc[mask, [a for a in assets
+                                            if a in monthly_returns.columns]]
+
+        if slice_.empty:
+            continue
+
         for asset in assets:
-            if asset not in monthly_returns.columns:
+            if asset not in slice_.columns:
                 continue
 
-            ret_series = monthly_returns[asset]
+            s = slice_[asset].dropna()
+            if s.empty:
+                continue
 
-            total_ret  = compute_period_return(ret_series, start, end)
-            ann_ret    = compute_annualised_return(ret_series, start, end)
-            max_dd     = compute_max_drawdown(ret_series, start, end)
+            n = len(s)
+            cumulative  = (1 + s / 100).prod() - 1
+            total_ret   = round(cumulative * 100, 2)
+            ann_ret     = round((((1 + cumulative) ** (12 / n)) - 1) * 100, 2) if n >= 1 else np.nan
+            cum_series  = (1 + s / 100).cumprod()
+            roll_max    = cum_series.cummax()
+            max_dd      = round(((cum_series - roll_max) / roll_max * 100).min(), 2) \
+                          if n >= 2 else np.nan
 
             rows.append({
                 "regime":            regime,

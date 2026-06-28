@@ -41,6 +41,18 @@ GDP_TREND_WINDOW      = 120     # rolling window for GDP trend (10yr)
 GDP_TREND_MIN_PERIODS = 24      # minimum months before GDP trend computed
 ZSCORE_MIN_PERIODS    = 36      # minimum months before expanding z-score computed
 
+# Window weights for ensemble probability averaging.
+# Higher weight = more influence on the primary regime call.
+# Downweight long windows to reduce Sentiment Driven dominance.
+# Must have an entry for every window in ZSCORE_WINDOWS + "expanding".
+ZSCORE_WINDOW_WEIGHTS = {
+    "36m":       1.0,
+    "60m":       1.0,
+    "120m":      1.0,
+    "240m":      0.5,
+    "expanding": 0.5,
+}
+
 # --- Regime Classifier -------------------------------------------------------
 SMOOTHING_WINDOW               = 3     # months, rolling mode
 TRANSITION_CONSENSUS_THRESHOLD = 0.60  # below this → transition flagged
@@ -87,7 +99,7 @@ REGIME_SECONDARY_IDEALS = {
 SERIES_LAGS_DAYS = {
     "CPIAUCSL":    45,   # CPI — mid month following reference month
     "PCEPI":       35,   # PCE
-    "GDP":         30,   # GDP first release (quarterly)
+    "GDP":         0,    # GDP — pandas_datareader returns latest release directly
     "OECD_CLI":    45,   # OECD Composite Leading Indicator
     "M2SL":         7,   # M2 money supply — weekly, ~1 week lag
     "WALCL":        7,   # Fed balance sheet — weekly H.4.1
@@ -97,7 +109,6 @@ SERIES_LAGS_DAYS = {
     "DTWEXBGS":     1,   # USD broad index — 1 day lag
     "BAMLH0A0HYM2": 1,   # HY credit spread — 1 day lag
     "^VIX":         0,   # VIX — real time
-    "^PCALL":       0,   # CBOE total put/call ratio — real time (Fullerton confirmed)
     "ISM_PMI":      3,   # ISM PMI proxy — first business day
 }
 
@@ -118,7 +129,6 @@ DATA_TIERS = {
     "DTWEXBGS":    "REALTIME",
     "BAMLH0A0HYM2":"REALTIME",
     "^VIX":        "REALTIME",
-    "^PCALL":      "REALTIME",
     "ISM_PMI":     "REVISED",
 }
 
@@ -149,8 +159,8 @@ FRED_OECD_CLI_ID = "USALOLITONOSTSAM"
 YAHOO_TICKERS = {
     # Risk appetite / factor inputs
     # Fullerton confirmed: VIX + put/call ratio are explicit components
+    # Note: ^PCALL not available on Yahoo Finance — VIX carries this weight
     "^VIX":   "CBOE VIX (fear index — inverted for risk appetite)",
-    "^PCALL": "CBOE Total Put/Call Ratio (inverted for risk appetite — Fullerton confirmed)",
     "^GSPC":  "S&P 500 (equity momentum / growth coincident)",
     # Asset class proxies for regime map
     # Aligned to Fullerton's disclosed return distribution assets:

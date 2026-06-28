@@ -42,9 +42,11 @@ def resample_to_monthly(s: pd.Series, frequency: str) -> pd.Series:
     elif frequency == "M":
         return s.resample("ME").last().dropna()
     elif frequency == "Q":
-        # Forward-fill quarterly data to monthly
-        monthly_idx = pd.date_range(s.index[0], s.index[-1], freq="ME")
-        return s.reindex(monthly_idx).ffill().dropna()
+        # Forward-fill quarterly data to monthly.
+        # Can't use reindex because GDP dates are quarter-start (2026-01-01)
+        # not month-end — reindex finds no matches.
+        # Use resample to month-end then forward-fill across gaps.
+        return s.resample("ME").last().ffill().dropna()
     else:
         return s.resample("ME").last().dropna()
 

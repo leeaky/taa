@@ -329,93 +329,114 @@ def compute_ensemble(
     if config.ZSCORE_EXPANDING:
         windows.append("expanding")
 
-    rows = []
+def compute_ensemble(
+    window_df: pd.DataFrame,
+    factors_df: pd.DataFrame,
+    config,
+) -> pd.DataFrame:
+    """
+    Combine all window variants into a single ensemble output per date.
+    Fully vectorised — no row-by-row loop.
+    """
+    windows = [f"{w}m" for w in config.ZSCORE_WINDOWS]
+    if config.ZSCORE_EXPANDING:
+        windows.append("expanding")
 
-    for dt in window_df.index:
-        row = {}
+    out = pd.DataFrame(index=window_df.index)
 
-        # --- Ensemble probabilities (average across windows) -----------------
-        ensemble_probs = {}
-        for rname in REGIME_NAMES:
-            prob_cols = [f"prob_{rname.replace(' ', '_')}_{w}"
-                         for w in windows
-                         if f"prob_{rname.replace(' ', '_')}_{w}" in window_df.columns]
-            vals = [window_df.loc[dt, c] for c in prob_cols
-                    if not np.isnan(window_df.loc[dt, c])]
-            ensemble_probs[rname] = np.mean(vals) if vals else np.nan
+    # --- Ensemble probabilities (weighted mean across windows) ---------------
+    window_weights = getattr(config, "ZSCORE_WINDOW_WEIGHTS", {})
+    weights = {w: window_weights.get(w, 1.0) for w in windows}
 
-        row.update({f"prob_{r.replace(' ', '_')}": p
-                    for r, p in ensemble_probs.items()})
-
-        # Normalise
-        total = sum(v for v in ensemble_probs.values() if not np.isnan(v))
-        if total > 0:
-            ensemble_probs = {r: v / total for r, v in ensemble_probs.items()}
-
-        primary = max(
-            {r: v for r, v in ensemble_probs.items() if not np.isnan(v)},
-            key=ensemble_probs.get,
-            default=None,
-        )
-        row["regime_primary"] = primary
-
-        # --- Window primaries for consensus ----------------------------------
-        window_primaries = []
+    for rname in REGIME_NAMES:
+        safe = rname.replace(" ", "_")
+        weighted_sum   = None
+        active_weight  = 0.0
         for w in windows:
-            col = f"regime_{w}"
-            if col in window_df.columns:
-                val = window_df.loc[dt, col]
-                window_primaries.append(val if val not in (None, "nan", "None") else None)
+            col = f"prob_{safe}_{w}"
+            if col not in window_df.columns:
+                continue
+            w_val = weights.get(w, 1.0)
+            if weighted_sum is None:
+                weighted_sum = window_df[col] * w_val
+            else:
+                weighted_sum = weighted_sum + window_df[col] * w_val
+            active_weight += w_val
 
-        # --- Confidence layers -----------------------------------------------
-        # Layer 1: magnitude — average across windows
-        mag_cols = [f"confidence_magnitude_{w}" for w in windows
-                    if f"confidence_magnitude_{w}" in window_df.columns]
-        mag_vals = [window_df.loc[dt, c] for c in mag_cols
-                    if not np.isnan(window_df.loc[dt, c])]
-        mag = float(np.mean(mag_vals)) if mag_vals else 0.0
+        if weighted_sum is not None and active_weight > 0:
+            out[f"prob_{safe}"] = weighted_sum / active_weight
+        else:
+            out[f"prob_{safe}"] = np.nan
 
-        # Layer 2: secondary — average across windows
-        sec_cols = [f"confidence_secondary_{w}" for w in windows
-                    if f"confidence_secondary_{w}" in window_df.columns]
-        sec_vals = [window_df.loc[dt, c] for c in sec_cols
-                    if not np.isnan(window_df.loc[dt, c])]
-        sec = float(np.mean(sec_vals)) if sec_vals else 0.5
+    # Normalise row-wise
+    prob_cols = [f"prob_{r.replace(' ', '_')}" for r in REGIME_NAMES]
+    prob_df   = out[prob_cols]
+    row_sums  = prob_df.sum(axis=1).replace(0, np.nan)
+    for col in prob_cols:
+        out[col] = out[col] / row_sums
 
-        # Layer 3: window consensus
-        cons = confidence_consensus(window_primaries)
+    # Primary = argmax across regime probability columns
+    # Use numpy to handle all-NaN rows gracefully
+    prob_arr = prob_df.values.astype(float)
+    regime_arr = np.array(REGIME_NAMES)
+    primary_vals = []
+    for row in prob_arr:
+        if np.all(np.isnan(row)):
+            primary_vals.append(None)
+        else:
+            primary_vals.append(regime_arr[np.nanargmax(row)])
+    out["regime_primary"] = primary_vals
 
-        combined = combined_confidence(mag, sec, cons)
+    # --- Confidence layer 1: magnitude (mean across windows) -----------------
+    mag_cols = [f"confidence_magnitude_{w}" for w in windows
+                if f"confidence_magnitude_{w}" in window_df.columns]
+    out["confidence_magnitude"] = window_df[mag_cols].mean(axis=1) if mag_cols else 0.0
 
-        row["confidence_magnitude"] = round(mag, 4)
-        row["confidence_secondary"] = round(sec, 4)
-        row["confidence_consensus"] = round(cons, 4)
-        row["regime_confidence"]    = round(combined, 4)
+    # --- Confidence layer 2: secondary (mean across windows) -----------------
+    sec_cols = [f"confidence_secondary_{w}" for w in windows
+                if f"confidence_secondary_{w}" in window_df.columns]
+    out["confidence_secondary"] = window_df[sec_cols].mean(axis=1) if sec_cols else 0.5
 
-        # --- Transition flag -------------------------------------------------
-        row["regime_transition"] = (
-            cons < config.TRANSITION_CONSENSUS_THRESHOLD
-        )
+    # --- Confidence layer 3: window consensus --------------------------------
+    regime_cols = [f"regime_{w}" for w in windows if f"regime_{w}" in window_df.columns]
+    if regime_cols:
+        reg_df = window_df[regime_cols].copy()
+        # For each row, count the most common non-null value
+        def _row_consensus(row):
+            valid = [v for v in row if v not in (None, "nan", "None", float("nan"))
+                     and str(v) not in ("nan", "None")]
+            if not valid:
+                return 0.0
+            most_common = max(set(valid), key=valid.count)
+            return sum(1 for v in valid if v == most_common) / len(valid)
+        out["confidence_consensus"] = reg_df.apply(_row_consensus, axis=1)
+    else:
+        out["confidence_consensus"] = 0.0
 
-        # --- Per-window smoothed labels (for display) -----------------------
-        for w in windows:
-            col = f"regime_{w}"
-            if col in window_df.columns:
-                row[col] = window_df.loc[dt, col]
+    # --- Combined confidence -------------------------------------------------
+    out["regime_confidence"] = (
+        out["confidence_magnitude"] +
+        out["confidence_secondary"] +
+        out["confidence_consensus"]
+    ) / 3
 
-        rows.append(row)
+    # Round confidence columns
+    for col in ["confidence_magnitude", "confidence_secondary",
+                "confidence_consensus", "regime_confidence"]:
+        out[col] = out[col].round(4)
 
-    ensemble_df = pd.DataFrame(rows, index=window_df.index)
+    # --- Transition flag -----------------------------------------------------
+    low_consensus = out["confidence_consensus"] < config.TRANSITION_CONSENSUS_THRESHOLD
+    label_changed = out["regime_primary"] != out["regime_primary"].shift(2)
+    out["regime_transition"] = low_consensus | label_changed
 
-    # Flag transitions where primary label changed in last 2 months
-    if "regime_primary" in ensemble_df.columns:
-        shifted = ensemble_df["regime_primary"].shift(2)
-        changed = ensemble_df["regime_primary"] != shifted
-        ensemble_df["regime_transition"] = (
-            ensemble_df["regime_transition"] | changed
-        )
+    # --- Per-window smoothed labels (pass through for display) ---------------
+    for w in windows:
+        col = f"regime_{w}"
+        if col in window_df.columns:
+            out[col] = window_df[col]
 
-    return ensemble_df
+    return out
 
 
 # =============================================================================
@@ -448,12 +469,17 @@ def classify_regimes(
 
     # Summary log
     if not ensemble_df.empty and "regime_primary" in ensemble_df.columns:
-        latest = ensemble_df.dropna(subset=["regime_primary"]).iloc[-1]
-        logger.info(
-            f"Classifier complete. Latest: {latest['regime_primary']} "
-            f"(confidence={latest['regime_confidence']:.2f}, "
-            f"transition={latest['regime_transition']})"
-        )
+        valid = ensemble_df.dropna(subset=["regime_primary"])
+        if not valid.empty:
+            latest = valid.iloc[-1]
+            logger.info(
+                f"Classifier complete. Latest: {latest['regime_primary']} "
+                f"(confidence={latest['regime_confidence']:.2f}, "
+                f"transition={latest['regime_transition']})"
+            )
+        else:
+            logger.warning("Classifier: ensemble produced no valid regime calls — "
+                           "check factor engine output for NaNs")
 
     return ensemble_df, window_df
 
@@ -466,8 +492,10 @@ def get_current_regime(ensemble_df: pd.DataFrame) -> dict:
     """Return the most recent regime call as a plain dict."""
     if ensemble_df.empty:
         return {}
-    latest = ensemble_df.dropna(subset=["regime_primary"]).iloc[-1]
-    return latest.to_dict()
+    valid = ensemble_df.dropna(subset=["regime_primary"])
+    if valid.empty:
+        return {}
+    return valid.iloc[-1].to_dict()
 
 
 def get_regime_history(

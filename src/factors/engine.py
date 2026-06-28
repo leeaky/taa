@@ -123,7 +123,7 @@ def compute_growth(df: pd.DataFrame, config) -> dict:
 
     # --- Leading: equity momentum (12m return on S&P 500) ---
     if "^GSPC" in df.columns:
-        eq_mom = df["^GSPC"].pct_change(config.YOY_WINDOW) * 100
+        eq_mom = df["^GSPC"].pct_change(config.YOY_WINDOW, fill_method=None) * 100
         components_leading["equity_momentum"] = eq_mom
     else:
         logger.warning("Growth: ^GSPC missing for equity momentum")
@@ -205,12 +205,12 @@ def compute_inflation(df: pd.DataFrame, config) -> dict:
 
     # CPI YoY
     if "CPIAUCSL" in df.columns:
-        cpi_yoy = df["CPIAUCSL"].pct_change(config.YOY_WINDOW) * 100
+        cpi_yoy = df["CPIAUCSL"].pct_change(config.YOY_WINDOW, fill_method=None) * 100
         components["cpi_yoy"] = cpi_yoy
 
     # PCE YoY
     if "PCEPI" in df.columns:
-        pce_yoy = df["PCEPI"].pct_change(config.YOY_WINDOW) * 100
+        pce_yoy = df["PCEPI"].pct_change(config.YOY_WINDOW, fill_method=None) * 100
         components["pce_yoy"] = pce_yoy
 
     # 5yr5yr forward inflation expectation (market-implied)
@@ -223,10 +223,10 @@ def compute_inflation(df: pd.DataFrame, config) -> dict:
 
     # Commodity momentum (proxy for input cost inflation)
     if "DJP" in df.columns:
-        com_mom = df["DJP"].pct_change(config.MOMENTUM_WINDOW_SHORT) * 100
+        com_mom = df["DJP"].pct_change(config.MOMENTUM_WINDOW_SHORT, fill_method=None) * 100
         components["commodity_momentum"] = com_mom
     elif "GLD" in df.columns:
-        gld_mom = df["GLD"].pct_change(config.MOMENTUM_WINDOW_SHORT) * 100
+        gld_mom = df["GLD"].pct_change(config.MOMENTUM_WINDOW_SHORT, fill_method=None) * 100
         components["gold_momentum"] = gld_mom
 
     # Revision signal
@@ -274,7 +274,7 @@ def compute_liquidity(df: pd.DataFrame, config) -> dict:
 
     # Fed M2 growth YoY
     if "M2SL" in df.columns:
-        m2_yoy = df["M2SL"].pct_change(config.YOY_WINDOW) * 100
+        m2_yoy = df["M2SL"].pct_change(config.YOY_WINDOW, fill_method=None) * 100
         components["m2_growth"] = m2_yoy
         coverage_notes.append("Fed M2")
     else:
@@ -282,7 +282,7 @@ def compute_liquidity(df: pd.DataFrame, config) -> dict:
 
     # Fed balance sheet growth YoY
     if "WALCL" in df.columns:
-        fed_bs_yoy = df["WALCL"].pct_change(config.YOY_WINDOW) * 100
+        fed_bs_yoy = df["WALCL"].pct_change(config.YOY_WINDOW, fill_method=None) * 100
         components["fed_balance_sheet"] = fed_bs_yoy
         coverage_notes.append("Fed BS")
     else:
@@ -290,7 +290,7 @@ def compute_liquidity(df: pd.DataFrame, config) -> dict:
 
     # Real rate = nominal yield - CPI (inverted: lower real rate = easier liquidity)
     if "T10Y2Y" in df.columns and "CPIAUCSL" in df.columns:
-        cpi_yoy = df["CPIAUCSL"].pct_change(config.YOY_WINDOW) * 100
+        cpi_yoy = df["CPIAUCSL"].pct_change(config.YOY_WINDOW, fill_method=None) * 100
         # Use 10y yield proxy: T10Y2Y + 2y (approximate via spread)
         # For simplicity use yield curve level as real rate proxy direction
         real_rate_proxy = -(df["T10Y2Y"] - cpi_yoy.reindex(df.index))
@@ -299,7 +299,7 @@ def compute_liquidity(df: pd.DataFrame, config) -> dict:
 
     # USD direction — inverted (USD strengthening = tightening global liquidity)
     if "DTWEXBGS" in df.columns:
-        usd_mom = -(df["DTWEXBGS"].pct_change(config.MOMENTUM_WINDOW_SHORT) * 100)
+        usd_mom = -(df["DTWEXBGS"].pct_change(config.MOMENTUM_WINDOW_SHORT, fill_method=None) * 100)
         components["usd_inverted"] = usd_mom
         coverage_notes.append("USD (inv)")
     else:
@@ -350,8 +350,8 @@ def compute_risk_appetite(df: pd.DataFrame, config) -> dict:
     if "^PCALL" in df.columns:
         components["putcall_inverted"] = -df["^PCALL"]
     else:
-        logger.warning("Risk Appetite: Put/call ratio missing — "
-                       "check ^PCALL availability in Yahoo Finance")
+        logger.info("Risk Appetite: put/call ratio not available on Yahoo Finance — "
+                    "VIX carrying this weight")
 
     # HY credit spread — inverted (wide spread = low risk appetite)
     if "BAMLH0A0HYM2" in df.columns:
@@ -362,7 +362,7 @@ def compute_risk_appetite(df: pd.DataFrame, config) -> dict:
     # EM vs DM relative performance (EEM / VT ratio momentum)
     if "EEM" in df.columns and "VT" in df.columns:
         em_dm_ratio = df["EEM"] / df["VT"].replace(0, np.nan)
-        em_dm_mom   = em_dm_ratio.pct_change(config.MOMENTUM_WINDOW_SHORT) * 100
+        em_dm_mom   = em_dm_ratio.pct_change(config.MOMENTUM_WINDOW_SHORT, fill_method=None) * 100
         components["em_dm_relative"] = em_dm_mom
 
     # Equity trend: S&P 500 vs its 12m moving average
@@ -374,7 +374,7 @@ def compute_risk_appetite(df: pd.DataFrame, config) -> dict:
     # HYG/LQD ratio momentum — credit risk appetite signal
     if "HYG" in df.columns and "LQD" in df.columns:
         hyg_lqd = df["HYG"] / df["LQD"].replace(0, np.nan)
-        hyg_lqd_mom = hyg_lqd.pct_change(config.MOMENTUM_WINDOW_SHORT) * 100
+        hyg_lqd_mom = hyg_lqd.pct_change(config.MOMENTUM_WINDOW_SHORT, fill_method=None) * 100
         components["hyg_lqd_ratio"] = hyg_lqd_mom
 
     if not components:

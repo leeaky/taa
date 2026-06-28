@@ -44,6 +44,8 @@ Inspired by and modelled on Fullerton Fund Management's Investment Environment M
 | Danger Zone | − | + | Falling growth, elevated stress |
 | Sentiment Driven | ~ | ~ | Macro ambiguous — risk appetite dominant |
 
+Sentiment Driven is treated as a distinct positive regime (consistent with Fullerton's published framework), not merely an uncertainty flag.
+
 **Confidence scoring — three layers:**
 1. Factor magnitude — how far are Growth and Inflation from zero
 2. Secondary confirmation — do Liquidity and Risk Appetite support the regime call
@@ -55,33 +57,42 @@ Inspired by and modelled on Fullerton Fund Management's Investment Environment M
 
 ```
 src/
-├── config.py               # All parameters — tickers, windows, thresholds, lags
+├── config.py               # All parameters — tickers, windows, thresholds, lags, regime ideals
 ├── data/
-│   ├── fetcher.py          # Pull from FRED + Yahoo Finance, cache locally
+│   ├── fetcher.py          # Pull from FRED + Yahoo Finance, cache locally, incremental refresh
 │   ├── vintage_manager.py  # Lag offsets, staleness flagging, revision signals
 │   ├── state_log.py        # Append-only record of every model run
 │   └── synthetic.py        # Regime-aware synthetic data for testing/showcase
 ├── factors/
-│   └── engine.py           # Four-factor computation across all z-score windows
+│   └── engine.py           # Four-factor computation across all z-score windows + consensus
 ├── regimes/
-│   └── classifier.py       # Five-regime probability vector + confidence scoring
+│   └── classifier.py       # Five-regime probability vector, confidence scoring, smoothing
 ├── analysis/
 │   └── regime_map.py       # Historical asset class performance by regime
-└── dashboard/
-    └── app.py              # Streamlit dashboard — live presentation layer
+├── dashboard/
+│   └── app.py              # Streamlit dashboard — five-page live presentation layer
+└── tests/
+    ├── test_module1.py     # Data fetcher + vintage manager
+    ├── test_module2.py     # Factor engine
+    ├── test_module3.py     # Regime classifier
+    └── test_module4.py     # Historical regime map
 ```
 
 ---
 
 ## Key design decisions
 
-**Data vintaging.** The model only uses data that was publicly available at the time of each run. Publication lags are encoded per series in config. Staleness is flagged visibly, never silently filled. Revisions are treated as new information, not corrections to history.
+**Config-driven.** Every meaningful number lives in `config.py` — z-score windows, publication lag offsets, regime ideal points, softmax temperature, momentum windows, staleness grace periods. Nothing is hardcoded in logic modules. Calibrating the model on live data means touching only `config.py`.
 
-**Window parameterisation.** Every factor is computed across five lookback windows simultaneously. A 3-year window asks "how does today compare to recent history." A 20-year window asks "how does today compare to a full cycle." These are different questions and will sometimes give different answers — that disagreement is surfaced, not hidden.
+**Data vintaging.** The model only uses data that was publicly available at the time of each run. Publication lags are encoded per series in config. Staleness is flagged visibly, never silently filled. Revisions are treated as new information arriving today, not corrections to the past.
 
-**State log.** Every daily run appends one row recording what the model said and what data it used. This is the live epistemic record. The historical bootstrap (before day one of live running) uses revised public data and is clearly labelled as illustrative.
+**Window parameterisation.** Every factor is computed across five lookback windows simultaneously. A 3-year window asks "how does today compare to recent history." A 20-year window asks "how does today compare to a full cycle." These are different questions and will sometimes give different answers — that disagreement is surfaced, not hidden. Where windows diverge, confidence scores fall and transition flags fire.
 
-**Daily cadence.** The model runs daily. Most days nothing changes. On days when a key release drops (PMI, CPI, GDP), the model updates immediately and logs what changed and why.
+**Probabilistic output.** Rather than a single hard regime label, the classifier outputs a probability vector across all five regimes at every date — consistent with Fullerton's disclosed Investment Environment Indicator. The primary label is the highest-probability regime, but the full distribution is always visible.
+
+**State log.** Every daily run appends one row recording what the model said and what data it used. This is the live epistemic record. The historical bootstrap (before day one of live running) uses revised public data and is clearly labelled as illustrative. BOOTSTRAP and LIVE periods are tagged separately throughout.
+
+**Daily cadence with incremental refresh.** The fetcher checks what's changed since the last run and pulls only updated series. Most days nothing changes. On data release days, the model updates immediately and logs what changed and why.
 
 **Discretionary overlay.** The model produces a signal. A human decides what to do with it. This is by design — the systematic layer compensates for cognitive bias and data overload; the discretionary layer compensates for model blind spots and regime transitions.
 
@@ -91,13 +102,12 @@ src/
 
 | Source | Series | Tier |
 |--------|--------|------|
-| FRED | GDP, CPI, PCE, M2, Fed balance sheet, yield curve, TIPS, forward inflation | REVISED* |
+| FRED | GDP, CPI, PCE, M2, Fed balance sheet, yield curve, TIPS, forward inflation, OECD CLI | REVISED* |
 | Yahoo Finance | VIX, put/call ratio, S&P 500, global equity ETFs, credit ETFs, commodities, gold | REALTIME |
-| OECD (via FRED) | Composite Leading Indicator | REVISED* |
 
-*REVISED means standard FRED data — retrospectively clean but not what existed in real time. Flagged in dashboard. ALFRED vintage data and Bloomberg DDIS would close this gap.
+`*REVISED` = standard FRED data — retrospectively clean but not what existed in real time. Flagged in dashboard. ALFRED vintage data or Bloomberg DDIS would close this gap.
 
-**Bloomberg gap:** The liquidity factor is the weakest on public data. ECB, PBoC, and BOJ balance sheet data, along with global M2 composites, require Bloomberg or CEIC. The current proxy (Fed-centric) is flagged and will be replaced when Bloomberg access is available.
+**Bloomberg gap:** The liquidity factor is the weakest on public data. ECB, PBoC, and BOJ balance sheet data, along with global M2 composites, require Bloomberg or CEIC. The current proxy (Fed-centric with USD as a global tightening proxy) is flagged in the dashboard and will be replaced when Bloomberg access is available. Only the fetcher and config need to change — nothing else.
 
 ---
 
@@ -105,15 +115,16 @@ src/
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `config.py` | ✅ Complete | Five-regime taxonomy, all tickers and lags |
-| `data/fetcher.py` | ✅ Complete | FRED + Yahoo, incremental refresh, cache |
-| `data/vintage_manager.py` | ✅ Complete | Lag offsets, staleness flagging, revision signals |
-| `data/state_log.py` | ✅ Complete | Append-only, append-on-run |
-| `data/synthetic.py` | ✅ Complete | Regime-aware synthetic data, full schema match |
+| `config.py` | ✅ Complete | Five-regime taxonomy, all tickers, lags, regime ideals, calibration parameters |
+| `data/fetcher.py` | ✅ Complete | FRED + Yahoo, incremental refresh, local cache |
+| `data/vintage_manager.py` | ✅ Complete | Lag offsets, staleness flagging, revision + surprise signals |
+| `data/state_log.py` | ✅ Complete | Append-only, records every daily run |
+| `data/synthetic.py` | ✅ Complete | Regime-aware synthetic data, exact schema match to live fetcher |
 | `factors/engine.py` | ✅ Complete | All four factors, five windows, consensus scoring |
-| `regimes/classifier.py` | 🔲 Next | Five-regime probability vector + confidence |
-| `analysis/regime_map.py` | 🔲 Pending | Historical asset performance by regime |
-| `dashboard/app.py` | 🔲 Pending | Streamlit — live dashboard |
+| `regimes/classifier.py` | ✅ Complete | Five-regime probability vector, three-layer confidence, smoothing |
+| `analysis/regime_map.py` | ✅ Complete | Regime periods, asset return stats, three summary matrices |
+| `dashboard/app.py` | ✅ Complete | Five-page Streamlit dashboard, dark terminal aesthetic |
+| `tests/test_module*.py` | ✅ Complete | Independent test scripts for each module |
 
 ---
 
@@ -123,48 +134,52 @@ src/
 # Install dependencies
 pip install -r requirements.txt
 
-# Run with synthetic data (no API keys needed)
-cd src
-python -c "
-import config
-from data.synthetic import generate_synthetic_data
-from data.vintage_manager import build_monthly_frame
-from factors.engine import compute_factors, get_factor_summary
+# Run all module tests (synthetic data, no internet required)
+cd C:\dev\taa
+python src/tests/test_module1.py
+python src/tests/test_module2.py
+python src/tests/test_module3.py
+python src/tests/test_module4.py
 
-raw, _, _ = generate_synthetic_data()
-df, quality = build_monthly_frame(raw, config)
-factors_df, meta = compute_factors(df, config)
-print(get_factor_summary(factors_df, config))
-"
+# Launch dashboard — synthetic data
+streamlit run src/dashboard/app.py
 
-# Run with live data (requires internet)
-python -c "
-import config
-from data.fetcher import get_data
-from data.vintage_manager import build_monthly_frame
-from factors.engine import compute_factors, get_factor_summary
-
-raw = get_data(config)
-df, quality = build_monthly_frame(raw, config)
-factors_df, meta = compute_factors(df, config)
-print(get_factor_summary(factors_df, config))
-"
-
-# Launch dashboard (once complete)
+# Launch dashboard — live data (toggle in sidebar, requires internet)
 streamlit run src/dashboard/app.py
 ```
+
+To switch from synthetic to live data: toggle "Live data" in the dashboard sidebar, or set `USE_LIVE_DATA = True` in any test script.
+
+---
+
+## Calibration notes
+
+The model ships with sensible defaults but several parameters will benefit from calibration once live data accumulates:
+
+**`SOFTMAX_TEMPERATURE`** (default 1.5) — controls how sharply the probability distribution concentrates around the nearest regime. Lower = more decisive calls. If Sentiment Driven dominates, reduce this toward 1.0.
+
+**`REGIME_IDEALS`** — the (growth, inflation) ideal point for each regime in z-score space. These encode where in factor space each regime sits. Review against actual factor readings once 6–12 months of live data exists.
+
+**`REGIME_SECONDARY_IDEALS`** — expected (liquidity, risk appetite) signatures per regime. Used for confidence layer 2. Same calibration timing as above.
+
+**`SENTIMENT_RA_THRESHOLD` / `SENTIMENT_BOOST_WEIGHT`** — govern how strongly elevated risk appetite boosts the Sentiment Driven probability when macro factors are ambiguous.
+
+All in `config.py`. No code changes required to calibrate.
 
 ---
 
 ## Roadmap
 
-- [ ] Module 3: Regime classifier — five-regime probability vector
-- [ ] Module 4: Historical regime map — asset class performance by regime
-- [ ] Module 5: Streamlit dashboard — live presentation layer
-- [ ] Bloomberg integration — replace thin liquidity proxies
-- [ ] Regional expansion — US, Europe, Asia roll-up to global
+- [x] Module 1: Data ingestion — FRED + Yahoo, vintaging, state log
+- [x] Module 2: Factor engine — four factors, five windows, consensus
+- [x] Module 3: Regime classifier — five-regime probability vector
+- [x] Module 4: Historical regime map — asset class performance by regime
+- [x] Module 5: Streamlit dashboard — live presentation layer
+- [ ] Bloomberg integration — replace thin liquidity proxies with full global CB coverage
 - [ ] ALFRED vintage data — close the real-time data gap for bootstrap history
+- [ ] Regional expansion — US, Europe, Asia roll-up to global composite
 - [ ] Augmented intelligence layer — alternative data, NLP sentiment signals
+- [ ] Portfolio construction layer — regime-conditional position sizing and risk budgeting
 
 ---
 
