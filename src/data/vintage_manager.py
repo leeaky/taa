@@ -97,9 +97,14 @@ def check_staleness(sid: str, s: pd.Series, lag_days: int, as_of: datetime) -> d
     expected_available = last_period + timedelta(days=lag_days)
     days_since_expected = (as_of - expected_available).days
 
-    # A series is stale if the most recent expected release hasn't arrived
-    # Allow 5 business days grace
-    stale = days_since_expected < -7
+    # A series is stale if the most recent expected release hasn't arrived.
+    # Grace period from config — allow a few business days before flagging.
+    try:
+        import config as _cfg
+        grace = _cfg.STALENESS_GRACE_DAYS
+    except Exception:
+        grace = 7
+    stale = days_since_expected < -grace
 
     return {
         "stale":             stale,
@@ -174,7 +179,7 @@ def build_monthly_frame(raw: dict, config, as_of: datetime = None) -> tuple[pd.D
         monthly[sid] = s_lagged
 
         # Revision and surprise signals for macro series only (not market prices)
-        if info["source"] == "FRED":
+        if "FRED" in info["source"]:
             revisions[sid] = compute_revision_delta(s_lagged)
             surprises[sid]  = compute_release_surprise(s_lagged)
 

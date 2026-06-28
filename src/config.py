@@ -33,10 +33,53 @@ FACTOR_EQUAL_WEIGHT   = True    # sub-components equal weighted within each fact
 REVISION_WEIGHT       = 0.10
 SURPRISE_WEIGHT       = 0.05
 
+# Sub-component calculation windows (months)
+MOMENTUM_WINDOW_SHORT = 3       # commodity, USD, EM/DM momentum lookback
+EQUITY_MA_WINDOW      = 12      # equity trend moving average
+YOY_WINDOW            = 12      # year-on-year calculation window
+GDP_TREND_WINDOW      = 120     # rolling window for GDP trend (10yr)
+GDP_TREND_MIN_PERIODS = 24      # minimum months before GDP trend computed
+ZSCORE_MIN_PERIODS    = 36      # minimum months before expanding z-score computed
+
 # --- Regime Classifier -------------------------------------------------------
 SMOOTHING_WINDOW               = 3     # months, rolling mode
 TRANSITION_CONSENSUS_THRESHOLD = 0.60  # below this → transition flagged
 CONFIDENCE_LAYERS_EQUAL_WEIGHT = True
+STALENESS_GRACE_DAYS           = 7     # days overdue before series flagged stale
+
+# Softmax temperature — controls sharpness of probability distribution.
+# Lower = more decisive (spikier) calls. Higher = softer, more spread.
+# 1.0 = sharp. 2.0 = soft. Calibrate on live data if Sentiment Driven dominates.
+SOFTMAX_TEMPERATURE   = 1.5
+
+# Sentiment Driven boost parameters
+# Applied when macro is ambiguous (growth and inflation near zero)
+# and risk appetite is elevated — consistent with Fullerton's treatment
+# of Sentiment Driven as a distinct positive regime.
+SENTIMENT_RA_THRESHOLD   = 0.30   # risk appetite must exceed this to trigger boost
+SENTIMENT_BOOST_WEIGHT   = 0.50   # multiplier on the boost signal
+
+# Regime ideal points — (growth_zscore, inflation_zscore) for each regime.
+# These define where in factor space each regime sits.
+# MOST IMPORTANT numbers to calibrate on live data.
+# Based on Fullerton's disclosed regime characteristics.
+REGIME_IDEALS = {
+    "Recovery":         ( 0.5, -1.0),
+    "Goldilocks":       ( 1.2, -0.5),
+    "Late Cycle":       ( 0.3,  1.0),
+    "Danger Zone":      (-1.2,  0.5),
+    "Sentiment Driven": ( 0.0,  0.0),
+}
+
+# Secondary factor signatures — expected (liquidity, risk_appetite) per regime.
+# Used for confidence layer 2.
+REGIME_SECONDARY_IDEALS = {
+    "Recovery":         ( 0.5,  0.0),
+    "Goldilocks":       ( 0.3,  0.8),
+    "Late Cycle":       (-0.3,  0.2),
+    "Danger Zone":      (-0.8, -1.0),
+    "Sentiment Driven": ( 0.0,  0.5),
+}
 
 # --- Release Calendar --------------------------------------------------------
 # Typical business days after reference period end before data is published.
