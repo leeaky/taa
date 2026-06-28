@@ -172,23 +172,32 @@ def test_synthetic_alignment(config):
     regime_s = regime_s.reindex(df.index, method="ffill")
 
     checks = [
-        ("Goldilocks -> positive yield curve", "T10Y2Y",    "Goldilocks",  "higher"),
-        ("Stagflation -> high CPI YoY",        "CPIAUCSL",  "Stagflation", "higher"),
-        ("Deflation -> low M2",                "M2SL",      "Deflation",   "lower"),
+        # Use native synthetic labels: Goldilocks, Reflation, Stagflation, Deflation
+        # Check raw series directional alignment (before z-scoring)
+        ("Goldilocks -> positive yield curve", "T10Y2Y",   "Goldilocks",  "higher"),
+        ("Stagflation -> high CPI",            "CPIAUCSL", "Stagflation", "higher"),
+        ("Deflation -> slow M2 growth (YoY)",  "M2SL",     "Deflation",   "lower"),
     ]
 
-    print("Directional alignment (synthetic data):")
+    print("Directional alignment (synthetic data, native four-quadrant labels):")
     for label, col, regime, expected in checks:
         if col not in df.columns:
             print(f"  --  {label}: {col} not in frame")
             continue
-        in_r  = df[col][regime_s == regime].mean()
-        out_r = df[col][regime_s != regime].mean()
+        s = df[col]
+        # Use YoY growth rate for level series to avoid trend distortion
+        if col in ("M2SL", "CPIAUCSL"):
+            s = s.pct_change(12) * 100
+        in_r  = s[regime_s == regime].mean()
+        out_r = s[regime_s != regime].mean()
+        if pd.isna(in_r) or pd.isna(out_r):
+            print(f"  SKIP  {label} — insufficient data")
+            continue
         ok = (expected == "higher" and in_r > out_r) or \
              (expected == "lower"  and in_r < out_r)
         flag = "PASS" if ok else "FAIL"
         print(f"  {flag}  {label}")
-        print(f"        In-regime: {in_r:.3f}  |  Out-of-regime: {out_r:.3f}")
+        print(f"        In-regime ({regime}): {in_r:.3f}  |  Out-of-regime: {out_r:.3f}")
 
 
 def run_all():

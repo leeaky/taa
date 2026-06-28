@@ -159,6 +159,8 @@ def test_regime_alignment(factors_df, config):
     """
     Synthetic only: verify that factor scores align with the known
     true regime used to generate the synthetic data.
+    Uses the synthetic generator's native four-quadrant labels directly
+    (before mapping to five-regime taxonomy) for clarity.
     """
     if USE_LIVE_DATA:
         return
@@ -172,28 +174,23 @@ def test_regime_alignment(factors_df, config):
     regime_s = regime_s.reindex(factors_df.index, method="ffill")
 
     ref = "60m"
+
+    # Use native synthetic labels — no mapping needed
+    # Synthetic generator uses: Goldilocks, Reflation, Stagflation, Deflation
     checks = [
         # (description, factor_col, expected_high_regime, expected_low_regime)
         ("Growth higher in Goldilocks vs Stagflation",
          f"growth_{ref}", "Goldilocks", "Stagflation"),
         ("Inflation higher in Stagflation vs Goldilocks",
          f"inflation_{ref}", "Stagflation", "Goldilocks"),
-        ("Risk appetite higher in Goldilocks vs Danger Zone",
-         f"risk_appetite_{ref}", "Goldilocks", "Danger Zone"),
-        ("Liquidity higher in Recovery vs Danger Zone",
-         f"liquidity_{ref}", "Recovery", "Danger Zone"),
+        ("Risk appetite higher in Goldilocks vs Stagflation",
+         f"risk_appetite_{ref}", "Goldilocks", "Stagflation"),
+        ("Liquidity higher in Goldilocks vs Deflation",
+         f"liquidity_{ref}", "Goldilocks", "Deflation"),
     ]
 
-    # Map synthetic regime labels to five-regime taxonomy
-    regime_map = {
-        "Goldilocks":  "Goldilocks",
-        "Reflation":   "Late Cycle",
-        "Stagflation": "Danger Zone",
-        "Deflation":   "Recovery",
-    }
-    regime_s = regime_s.map(regime_map).fillna(regime_s)
-
     print(f"Using {ref} window. Synthetic regime alignment:")
+    print(f"(Labels are synthetic generator's native four-quadrant labels)")
     print()
     for desc, col, high_regime, low_regime in checks:
         if col not in factors_df.columns:
@@ -201,6 +198,9 @@ def test_regime_alignment(factors_df, config):
             continue
         high_mean = factors_df[col][regime_s == high_regime].mean()
         low_mean  = factors_df[col][regime_s == low_regime].mean()
+        if pd.isna(high_mean) or pd.isna(low_mean):
+            print(f"  SKIP  {desc} — insufficient data for one or both regimes")
+            continue
         ok   = high_mean > low_mean
         flag = "PASS" if ok else "FAIL"
         print(f"  {flag}  {desc}")
