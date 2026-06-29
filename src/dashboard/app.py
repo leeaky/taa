@@ -115,7 +115,7 @@ st.set_page_config(
 st.markdown(f"""
 <style>
     .stApp {{ background-color: {COLORS['bg']}; color: {COLORS['text']}; }}
-    .block-container {{ padding-top: 1.5rem; }}
+    .block-container {{ padding-top: 3.5rem; }}
     [data-testid="stSidebar"] {{ background-color: {COLORS['surface']}; }}
     [data-testid="stMetric"] {{ background-color: {COLORS['surface']};
                                  border: 1px solid {COLORS['border']};
