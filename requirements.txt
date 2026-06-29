@@ -5,3 +5,4 @@ yfinance>=0.2
 streamlit>=1.35
 plotly>=5.20
 scipy>=1.11
+matplotlib>=3.7
