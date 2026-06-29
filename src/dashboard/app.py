@@ -52,9 +52,12 @@ logging.basicConfig(level=logging.WARNING)
 # --- Cloud detection ---------------------------------------------------------
 # Streamlit Community Cloud sets specific environment variables.
 # When running on cloud: use committed data snapshot, disable live toggle.
+# To test snapshot mode locally: set FORCE_SNAPSHOT=true before launching.
+#   Windows: set FORCE_SNAPSHOT=true && streamlit run src/dashboard/app.py
 import os as _os
 IS_CLOUD = bool(
     _os.environ.get("STREAMLIT_SHARING_MODE") or
+    _os.environ.get("FORCE_SNAPSHOT", "").lower() == "true" or
     _os.environ.get("HOSTNAME", "").startswith("streamlit") or
     not Path(SRC / "data" / "cache").exists()  # no cache = likely cloud
 )
@@ -154,11 +157,14 @@ def _make_cfg(overrides: dict):
 
 
 @st.cache_data(ttl=config.REFRESH_CACHE_HOURS * 3600, show_spinner="Loading data...")
-def load_all(use_live: bool, overrides_hash: str):
-    """overrides_hash busts cache when parameters change."""
-    # Rebuild config fresh from disk — bypasses Streamlit module cache
+def load_all(use_live: bool, overrides_hash: str, is_cloud: bool,
+             use_snapshot: bool = False):
+    """overrides_hash and is_cloud bust cache when parameters change."""
     overrides = load_overrides()
     cfg = _make_cfg(overrides)
+
+    # Determine effective data source
+    _use_snapshot = use_snapshot or (is_cloud and not use_live)
 
     if use_live:
         try:
@@ -172,16 +178,15 @@ def load_all(use_live: bool, overrides_hash: str):
                 from data.synthetic import generate_synthetic_data
                 raw, _, _ = generate_synthetic_data()
                 use_live = False
-    elif IS_CLOUD:
-        # Cloud showcase — use committed snapshot of real data
+    elif _use_snapshot:
         from data.fetcher import get_data
         raw = get_data(cfg, use_snapshot=True)
         if not raw:
-            # Snapshot not committed yet — fall back to synthetic
             st.info("Data snapshot not found — using synthetic data. "
                     "Run src/data/snapshot.py locally and commit the snapshot.")
             from data.synthetic import generate_synthetic_data
             raw, _, _ = generate_synthetic_data()
+            _use_snapshot = False
     else:
         from data.synthetic import generate_synthetic_data
         raw, _, _ = generate_synthetic_data()
@@ -195,13 +200,13 @@ def load_all(use_live: bool, overrides_hash: str):
     _log.getLogger(__name__).warning(
         f"load_all: monthly frame={df.shape}, "
         f"factor rows with data={valid_factor_rows}, "
-        f"mode={'LIVE' if use_live else 'SYNTHETIC'}"
+        f"mode={'LIVE' if use_live else 'SNAPSHOT' if _use_snapshot else 'SYNTHETIC'}"
     )
 
     # Determine data mode label for regime map
     if use_live:
         _data_mode = "LIVE"
-    elif IS_CLOUD:
+    elif _use_snapshot:
         _data_mode = "SNAPSHOT"
     else:
         _data_mode = "BOOTSTRAP"
@@ -223,6 +228,7 @@ def load_all(use_live: bool, overrides_hash: str):
         "current":        current,
         "quality_df":     quality_df,
         "use_live":       use_live,
+        "data_mode":      _data_mode,
         "loaded_at":      datetime.utcnow(),
     }
 
@@ -242,8 +248,18 @@ with st.sidebar:
              "Run locally to enable." if IS_CLOUD else
              "Toggle to fetch live data from FRED + Yahoo Finance.",
     )
+
+    # Snapshot toggle — visible locally for testing, always on in cloud
     if IS_CLOUD:
+        use_snapshot = True
         st.caption("☁ Cloud mode — using committed data snapshot")
+    else:
+        use_snapshot = st.toggle(
+            "Use data snapshot",
+            value=False,
+            help="Load the committed historical data snapshot instead of "
+                 "synthetic data. Run src/data/snapshot.py first to create it.",
+        )
 
     if st.button("↺  Refresh", use_container_width=True):
         st.cache_data.clear()
@@ -274,7 +290,7 @@ import json as _json
 _current_overrides = load_overrides()
 _overrides_hash = str(hash(_json.dumps(_current_overrides, sort_keys=True)))
 
-data = load_all(use_live, _overrides_hash)
+data = load_all(use_live, _overrides_hash, IS_CLOUD, use_snapshot)
 
 current       = data["current"]
 factors_df    = data["factors_df"]
@@ -285,10 +301,7 @@ factor_summary = data["factor_summary"]
 quality_df    = data["quality_df"]
 
 as_of = factors_df.dropna(how="all").index[-1].strftime("%d %b %Y")
-if IS_CLOUD and not data["use_live"]:
-    data_mode = "SNAPSHOT"
-else:
-    data_mode = "LIVE" if data["use_live"] else "SYNTHETIC"
+data_mode = data["data_mode"]
 
 # =============================================================================
 # HELPERS
