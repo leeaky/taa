@@ -262,21 +262,24 @@ def build_summary_matrix(
 # DATA SOURCE LABELLING
 # =============================================================================
 
-def label_data_source(regime_periods: pd.DataFrame,
-                       state_log_start: Optional[pd.Timestamp]) -> pd.DataFrame:
+def label_data_source(
+    regime_periods: pd.DataFrame,
+    state_log_start: Optional[pd.Timestamp],
+    data_mode: str = "BOOTSTRAP",
+) -> pd.DataFrame:
     """
-    Tag each regime period as BOOTSTRAP or LIVE based on whether
-    it occurred before or after the state log started.
+    Tag each regime period with its data source.
 
-    BOOTSTRAP = revised public data, illustrative
+    BOOTSTRAP = synthetic or revised public data, illustrative
+    SNAPSHOT  = committed real data snapshot, historically accurate
     LIVE      = from state log, epistemically honest
     """
     df = regime_periods.copy()
     if state_log_start is None:
-        df["data_source"] = "BOOTSTRAP"
+        df["data_source"] = data_mode  # BOOTSTRAP or SNAPSHOT
     else:
         df["data_source"] = df["start"].apply(
-            lambda s: "LIVE" if s >= state_log_start else "BOOTSTRAP"
+            lambda s: "LIVE" if s >= state_log_start else data_mode
         )
     return df
 
@@ -290,6 +293,7 @@ def build_regime_map(
     prices_df: pd.DataFrame,
     config,
     state_log_df: Optional[pd.DataFrame] = None,
+    data_mode: str = "BOOTSTRAP",
 ) -> dict:
     """
     Full regime map pipeline.
@@ -342,7 +346,7 @@ def build_regime_map(
             state_log_start = pd.to_datetime(
                 state_log_df["run_timestamp"].min()
             )
-    regime_periods = label_data_source(regime_periods, state_log_start)
+    regime_periods = label_data_source(regime_periods, state_log_start, data_mode)
 
     # --- Statistics ----------------------------------------------------------
     asset_stats = compute_asset_stats(regime_periods, monthly_returns, assets)
@@ -359,13 +363,24 @@ def build_regime_map(
 
     # --- Data note -----------------------------------------------------------
     n_bootstrap = (regime_periods["data_source"] == "BOOTSTRAP").sum()
+    n_snapshot  = (regime_periods["data_source"] == "SNAPSHOT").sum()
     n_live      = (regime_periods["data_source"] == "LIVE").sum()
-    data_note = (
-        f"{len(regime_periods)} regime periods total. "
-        f"{n_bootstrap} BOOTSTRAP (revised public data — illustrative). "
-        f"{n_live} LIVE (state log — epistemically honest). "
-        f"Asset returns from monthly ETF prices."
-    )
+
+    parts = [f"{len(regime_periods)} regime periods total."]
+    if n_snapshot > 0:
+        parts.append(
+            f"{n_snapshot} SNAPSHOT (real historical data — committed cache)."
+        )
+    if n_bootstrap > 0:
+        parts.append(
+            f"{n_bootstrap} BOOTSTRAP (synthetic/revised data — illustrative)."
+        )
+    if n_live > 0:
+        parts.append(
+            f"{n_live} LIVE (state log — epistemically honest)."
+        )
+    parts.append("Asset returns from monthly ETF prices.")
+    data_note = " ".join(parts)
 
     logger.info(
         f"Regime map complete. {len(regime_periods)} periods, "

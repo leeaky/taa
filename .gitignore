@@ -19,3 +19,6 @@ __pycache__/
 config_overrides.json
 src/data/cache/
 src/logs/
+
+# src/data/snapshot/ is intentionally committed — do not add here
+# It contains the real historical data snapshot for Streamlit Cloud

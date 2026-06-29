@@ -153,17 +153,37 @@ def save_cache(results: dict, cache_path: Path):
     logger.info(f"Cache saved to {cache_path}")
 
 
-def get_data(config, force_refresh: bool = False) -> dict:
+def get_data(config, force_refresh: bool = False, use_snapshot: bool = False) -> dict:
     """
     Main entry point. Returns raw series dict.
-    Uses cache if fresh (< REFRESH_CACHE_HOURS old), else re-fetches.
+
+    Priority order:
+      1. Local cache (if fresh and not force_refresh)
+      2. Live fetch from FRED + Yahoo
+      3. Committed snapshot (fallback for Streamlit Cloud or offline use)
+      4. Empty dict (all downstream code handles this gracefully)
+
+    Parameters
+    ----------
+    force_refresh  : bypass cache and fetch live
+    use_snapshot   : skip live fetch and load committed snapshot directly
     """
+    from data.snapshot import load_snapshot
+
     cache_path = config.DATA_DIR
 
+    # --- Snapshot mode (Streamlit Cloud showcase) ----------------------------
+    if use_snapshot:
+        logger.info("Snapshot mode — loading committed data snapshot.")
+        snap = load_snapshot()
+        if snap:
+            return snap
+        logger.warning("Snapshot not found — falling back to live fetch.")
+
+    # --- Check local cache ---------------------------------------------------
     if not force_refresh:
         cached = load_cache(cache_path)
         if cached:
-            # Check age of cache via any series fetched_at
             sample = next(iter(cached.values()))
             age_hours = (datetime.utcnow() - sample["fetched_at"]).total_seconds() / 3600
             if age_hours < config.REFRESH_CACHE_HOURS:
@@ -172,7 +192,20 @@ def get_data(config, force_refresh: bool = False) -> dict:
             else:
                 logger.info(f"Cache is {age_hours:.1f}h old — refreshing.")
 
-    results = fetch_all(config)
-    if results:
-        save_cache(results, cache_path)
-    return results
+    # --- Live fetch ----------------------------------------------------------
+    try:
+        results = fetch_all(config)
+        if results:
+            save_cache(results, cache_path)
+            return results
+    except Exception as e:
+        logger.warning(f"Live fetch failed: {e} — trying snapshot fallback.")
+
+    # --- Snapshot fallback ---------------------------------------------------
+    snap = load_snapshot()
+    if snap:
+        logger.info("Using committed snapshot as fallback.")
+        return snap
+
+    logger.error("No data available — cache empty, live fetch failed, no snapshot.")
+    return {}

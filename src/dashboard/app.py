@@ -49,6 +49,16 @@ from analysis.regime_map import (
 
 logging.basicConfig(level=logging.WARNING)
 
+# --- Cloud detection ---------------------------------------------------------
+# Streamlit Community Cloud sets specific environment variables.
+# When running on cloud: use committed data snapshot, disable live toggle.
+import os as _os
+IS_CLOUD = bool(
+    _os.environ.get("STREAMLIT_SHARING_MODE") or
+    _os.environ.get("HOSTNAME", "").startswith("streamlit") or
+    not Path(SRC / "data" / "cache").exists()  # no cache = likely cloud
+)
+
 # =============================================================================
 # DESIGN TOKENS
 # Dark terminal aesthetic — appropriate for a live macro signal tool.
@@ -155,10 +165,25 @@ def load_all(use_live: bool, overrides_hash: str):
             from data.fetcher import get_data
             raw = get_data(cfg)
         except Exception as e:
-            st.warning(f"Live data fetch failed ({e}). Falling back to synthetic.")
+            st.warning(f"Live data fetch failed ({e}). Falling back to snapshot.")
+            from data.fetcher import get_data
+            raw = get_data(cfg, use_snapshot=True)
+            if not raw:
+                from data.synthetic import generate_synthetic_data
+                raw, _, _ = generate_synthetic_data()
+                use_live = False
+    elif IS_CLOUD:
+        # Cloud showcase — use committed snapshot of real data
+        from data.fetcher import get_data
+        raw = get_data(cfg, use_snapshot=True)
+        if not raw:
+            # Snapshot not committed yet — fall back to synthetic
+            st.info("Data snapshot not found — using synthetic data. "
+                    "Run src/data/snapshot.py locally and commit the snapshot.")
+            from data.synthetic import generate_synthetic_data
             raw, _, _ = generate_synthetic_data()
-            use_live = False
     else:
+        from data.synthetic import generate_synthetic_data
         raw, _, _ = generate_synthetic_data()
 
     df, quality         = build_monthly_frame(raw, cfg)
@@ -173,8 +198,17 @@ def load_all(use_live: bool, overrides_hash: str):
         f"mode={'LIVE' if use_live else 'SYNTHETIC'}"
     )
 
+    # Determine data mode label for regime map
+    if use_live:
+        _data_mode = "LIVE"
+    elif IS_CLOUD:
+        _data_mode = "SNAPSHOT"
+    else:
+        _data_mode = "BOOTSTRAP"
+
     ensemble_df, win_df = classify_regimes(factors_df, cfg)
-    regime_map          = build_regime_map(ensemble_df, df, cfg)
+    regime_map          = build_regime_map(ensemble_df, df, cfg,
+                                           data_mode=_data_mode)
     factor_summary      = get_factor_summary(factors_df, cfg)
     current             = get_current_regime(ensemble_df)
     quality_df          = get_data_quality_summary(quality)
@@ -203,8 +237,13 @@ with st.sidebar:
     use_live = st.toggle(
         "Live data (FRED + Yahoo)",
         value=False,
-        help="Off = synthetic data. On = live FRED + Yahoo feeds.",
+        disabled=IS_CLOUD,
+        help="Live data not available in cloud showcase mode. "
+             "Run locally to enable." if IS_CLOUD else
+             "Toggle to fetch live data from FRED + Yahoo Finance.",
     )
+    if IS_CLOUD:
+        st.caption("☁ Cloud mode — using committed data snapshot")
 
     if st.button("↺  Refresh", use_container_width=True):
         st.cache_data.clear()
@@ -246,7 +285,10 @@ factor_summary = data["factor_summary"]
 quality_df    = data["quality_df"]
 
 as_of = factors_df.dropna(how="all").index[-1].strftime("%d %b %Y")
-data_mode = "LIVE" if data["use_live"] else "SYNTHETIC"
+if IS_CLOUD and not data["use_live"]:
+    data_mode = "SNAPSHOT"
+else:
+    data_mode = "LIVE" if data["use_live"] else "SYNTHETIC"
 
 # =============================================================================
 # HELPERS
