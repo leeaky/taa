@@ -1,0 +1,107 @@
+{
+  "GDP": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "Q"
+  },
+  "T10Y2Y": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "USALOLITONOSTSAM": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "M"
+  },
+  "CPIAUCSL": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "M"
+  },
+  "PCEPI": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "M"
+  },
+  "T5YIFR": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "DFII5": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "M2SL": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "M"
+  },
+  "WALCL": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "DTWEXBGS": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "BAMLH0A0HYM2": {
+    "source": "FRED",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "^VIX": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "^GSPC": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "VT": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "AGG": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "EEM": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "HYG": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "LQD": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "DJP": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "GLD": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  },
+  "TLT": {
+    "source": "YAHOO",
+    "fetched_at": "2026-06-29T05:10:54.411152",
+    "frequency": "D"
+  }
+}
