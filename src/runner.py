@@ -41,10 +41,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run():
+def run(force: bool = False):
     run_start = datetime.utcnow()
     logger.info("=" * 60)
-    logger.info(f"TAA Daily Runner — {run_start.strftime('%Y-%m-%d %H:%M UTC')}")
+    logger.info(f"TAA Daily Runner — {run_start.strftime('%Y-%m-%d %H:%M UTC')}"
+                + (" [FORCE]" if force else ""))
     logger.info("=" * 60)
 
     # --- Import after path setup so src/ modules resolve ---------------------
@@ -58,12 +59,32 @@ def run():
     from factors.engine import compute_factors, get_factor_summary
     from regimes.classifier import classify_regimes, get_current_regime, REGIME_NAMES
 
-    # --- Build effective config (base + any overrides) -----------------------
+    # --- Build effective config ----------------------------------------------
     overrides = load_overrides()
     import types
     effective = get_effective_config()
     effective.update(overrides)
     cfg = types.SimpleNamespace(**effective)
+
+    # --- Deduplication guard -------------------------------------------------
+    # Prevent two entries for the same as_of_date unless --force is passed
+    if not force:
+        existing = load_state_log(cfg.STATE_LOG_PATH)
+        if not existing.empty and "as_of_date" in existing.columns:
+            today_str = str(run_start.date())
+            already_run_today = existing["as_of_date"].astype(str).str.startswith(
+                today_str[:7]  # match YYYY-MM
+            )
+            # More precise: check if any row has same as_of_date
+            same_day = existing["as_of_date"].astype(str).str[:10] == today_str
+            if same_day.any():
+                last_ts = existing[same_day]["run_timestamp"].iloc[-1]
+                logger.info(
+                    f"Already ran today ({today_str}). "
+                    f"Last run: {last_ts}. "
+                    f"Use --force to run again."
+                )
+                return True
 
     # --- Fetch data ----------------------------------------------------------
     logger.info("Fetching data...")
@@ -213,5 +234,6 @@ def run():
 
 
 if __name__ == "__main__":
-    success = run()
+    force = "--force" in sys.argv
+    success = run(force=force)
     sys.exit(0 if success else 1)
