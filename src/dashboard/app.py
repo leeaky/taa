@@ -467,14 +467,14 @@ def build_factor_history_chart(_factors_df, _ensemble_df, window_choice, show_sh
 if page == "Current State":
 
     # Header
-    col_title, col_as_of = st.columns([3, 1])
+    col_title, col_as_of = st.columns([2, 1])
     with col_title:
         st.markdown("## Current Investment Environment")
     with col_as_of:
         st.markdown(f"""
         <div style='text-align:right; padding-top:10px;
                     color:{COLORS["text_muted"]}; font-family:monospace;
-                    font-size:0.85rem;'>
+                    font-size:0.8rem; white-space:nowrap;'>
         As of {as_of}<br>{data_mode}
         </div>""", unsafe_allow_html=True)
 
