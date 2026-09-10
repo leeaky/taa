@@ -1,7 +1,7 @@
 # =============================================================================
 # TEST / REVIEW SCRIPT — MODULE 4
 # Tests the historical regime map independently.
-# Run from C:\dev\taa with: python src/tests/test_module4.py
+# Run from C:\dev\taa with: python src/tests/check_module4.py
 # =============================================================================
 
 import sys

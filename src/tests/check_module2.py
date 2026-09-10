@@ -1,7 +1,7 @@
 # =============================================================================
 # TEST / REVIEW SCRIPT — MODULE 2
 # Tests the factor engine independently.
-# Run from C:\dev\taa with: python src/tests/test_module2.py
+# Run from C:\dev\taa with: python src/tests/check_module2.py
 #
 # Runs in two modes:
 #   SYNTHETIC (default) — no internet required, instant

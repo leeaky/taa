@@ -1,7 +1,7 @@
 # =============================================================================
 # TEST / REVIEW SCRIPT — MODULE 3
 # Tests the regime classifier independently.
-# Run from C:\dev\taa with: python src/tests/test_module3.py
+# Run from C:\dev\taa with: python src/tests/check_module3.py
 #
 # USE_LIVE_DATA = False  → synthetic data, instant
 # USE_LIVE_DATA = True   → live FRED + Yahoo

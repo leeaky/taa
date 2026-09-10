@@ -1,7 +1,7 @@
 # =============================================================================
 # TEST / REVIEW SCRIPT — MODULE 1
 # Tests data fetcher, vintage manager, and state log independently.
-# Run from C:\dev\taa with: python src/tests/test_module1.py
+# Run from C:\dev\taa with: python src/tests/check_module1.py
 #
 # Runs in two modes:
 #   SYNTHETIC (default) — no internet required, instant

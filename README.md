@@ -76,10 +76,10 @@ src/
 ├── dashboard/
 │   └── app.py               # Streamlit dashboard — six-page live presentation layer
 └── tests/
-    ├── test_module1.py      # Data fetcher + vintage manager
-    ├── test_module2.py      # Factor engine
-    ├── test_module3.py      # Regime classifier
-    ├── test_module4.py      # Historical regime map
+    ├── check_module1.py     # Data fetcher + vintage manager
+    ├── check_module2.py     # Factor engine
+    ├── check_module3.py     # Regime classifier
+    ├── check_module4.py     # Historical regime map
     └── diagnose_live.py     # Live data diagnostic — run when data issues arise
 ```
 
@@ -146,11 +146,11 @@ src/
 # Install dependencies
 pip install -r requirements.txt
 
-# Run all module tests (synthetic data, no internet required)
-python src/tests/test_module1.py
-python src/tests/test_module2.py
-python src/tests/test_module3.py
-python src/tests/test_module4.py
+# Run all module checks (synthetic data, no internet required)
+python src/tests/check_module1.py
+python src/tests/check_module2.py
+python src/tests/check_module3.py
+python src/tests/check_module4.py
 
 # Run daily model and write first state log entry (requires internet)
 python src/runner.py
